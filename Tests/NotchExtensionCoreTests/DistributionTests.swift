@@ -1,3 +1,4 @@
+import Darwin
 import XCTest
 import CryptoKit
 @testable import NotchExtensionCore
@@ -14,7 +15,7 @@ final class DistributionTests: XCTestCase {
         SignedCatalogPayload(catalogVersion: version, expiresAt: expires, entries: [])
     }
     private func temporaryDirectory() throws -> URL {
-        let url = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent(UUID().uuidString)
+        let url = (try physicalFixtureParent(FileManager.default.temporaryDirectory)).appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: url) }
         return url
@@ -190,4 +191,13 @@ final class DistributionTests: XCTestCase {
     private func put32(_ bytes: inout Data, _ offset: Int, _ value: UInt32) {
         for i in 0..<4 { bytes[offset + i] = UInt8(truncatingIfNeeded: value >> (i * 8)) }
     }
+}
+
+// Resolve only a trusted, existing fixture parent. Never use this on package paths.
+private func physicalFixtureParent(_ url: URL) throws -> URL {
+    guard let pointer = realpath(url.path, nil) else {
+        throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+    }
+    defer { free(pointer) }
+    return URL(fileURLWithPath: String(cString: pointer), isDirectory: true)
 }

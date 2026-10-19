@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import XCTest
 @testable import NotchExtensionCore
@@ -6,7 +7,7 @@ final class ExtensionStoreTests: XCTestCase {
     private var temporary: URL!
     override func setUpWithError() throws {
         // macOS /tmp is itself a symlink. Resolve only the test fixture's trusted parent.
-        temporary = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent(UUID().uuidString)
+        temporary = (try physicalFixtureParent(FileManager.default.temporaryDirectory)).appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
     }
     override func tearDownWithError() throws { try FileManager.default.removeItem(at: temporary) }
@@ -19,6 +20,25 @@ final class ExtensionStoreTests: XCTestCase {
         return directory
     }
     private func store() throws -> ExtensionStore { try ExtensionStore(rootURL: temporary.appendingPathComponent("store")) }
+    func testTrustedTemporaryPathStagesDiagnostic() throws {
+        let supplied = FileManager.default.temporaryDirectory
+        let resolved = supplied.resolvingSymlinksInPath()
+        let physical = try physicalFixtureParent(supplied)
+        print("TEMP-PATH supplied=\(supplied.path) foundationResolved=\(resolved.path) posixRealpath=\(physical.path)")
+        var ancestor = physical
+        for stage in 0..<32 {
+            print("TEMP-PATH stage=\(stage) URL-parent=\(ancestor.path)")
+            if ancestor.path == "/" { break }
+            let parent = ancestor.deletingLastPathComponent()
+            if parent.path == ancestor.path { break }
+            ancestor = parent
+        }
+        // Verify the caller's physical path without permitting the /var alias.
+        let directory = physical.appendingPathComponent("diagnostic-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try ExtensionStore(rootURL: directory)
+        XCTAssertEqual(store.rootURL.path, directory.path)
+    }
     func testCanonicalStoreRootIsPreservedAndAliasIsRejected() throws {
         let canonical = temporary.appendingPathComponent("canonical-store")
         let store = try ExtensionStore(rootURL: canonical)
@@ -133,4 +153,13 @@ final class ExtensionStoreTests: XCTestCase {
         let catalog = ExtensionCatalog(entries: [])
         XCTAssertEqual(try JSONDecoder().decode(ExtensionCatalog.self, from: JSONEncoder().encode(catalog)), catalog)
     }
+}
+
+// Resolve only a trusted, existing fixture parent. Never use this on package paths.
+private func physicalFixtureParent(_ url: URL) throws -> URL {
+    guard let pointer = realpath(url.path, nil) else {
+        throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+    }
+    defer { free(pointer) }
+    return URL(fileURLWithPath: String(cString: pointer), isDirectory: true)
 }
