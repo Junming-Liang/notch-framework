@@ -19,6 +19,14 @@ final class ExtensionStoreTests: XCTestCase {
         return directory
     }
     private func store() throws -> ExtensionStore { try ExtensionStore(rootURL: temporary.appendingPathComponent("store")) }
+    func testCanonicalStoreRootIsPreservedAndAliasIsRejected() throws {
+        let canonical = temporary.appendingPathComponent("canonical-store")
+        let store = try ExtensionStore(rootURL: canonical)
+        XCTAssertEqual(store.rootURL.path, canonical.path)
+        let alias = temporary.appendingPathComponent("store-alias")
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: canonical)
+        XCTAssertThrowsError(try ExtensionStore(rootURL: alias.appendingPathComponent("child")))
+    }
     func testInstallDisabledEnablePersistsAndDisablePersists() throws {
         let store = try store()
         let item = try store.installDeveloperFixture(from: fixture())

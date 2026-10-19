@@ -20,6 +20,16 @@ final class DistributionTests: XCTestCase {
         return url
     }
 
+    func testCanonicalCacheAcceptsRealParentAndRejectsSymlinkParent() throws {
+        let root = try temporaryDirectory()
+        let canonical = root.appendingPathComponent("canonical-cache")
+        let key = Curve25519.Signing.PrivateKey()
+        _ = try SignedPackageTransport(configuration: config(key), cacheDirectory: canonical)
+        let alias = root.appendingPathComponent("cache-alias")
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: canonical)
+        XCTAssertThrowsError(try SignedPackageTransport(configuration: config(key), cacheDirectory: alias.appendingPathComponent("child")))
+    }
+
     func testPythonSignedRFC8032FixtureVerifiesInCryptoKit() throws {
         let fixture = try XCTUnwrap(Bundle.module.url(forResource: "python-signed-catalog", withExtension: "json", subdirectory: "Fixtures"))
         let hex = Array("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a")
