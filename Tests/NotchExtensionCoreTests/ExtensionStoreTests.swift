@@ -68,6 +68,8 @@ final class ExtensionStoreTests: XCTestCase {
         XCTAssertThrowsError(try store.makeProcess(id:installed.manifest.id))
         try store.setEnabled(id:installed.manifest.id,enabled:false)
         XCTAssertThrowsError(try self.store().setEnabled(id:installed.manifest.id,enabled:true))
+        XCTAssertFalse(try self.store().list().first!.enabled)
+        XCTAssertThrowsError(try self.store().makeProcess(id:installed.manifest.id))
     }
     func testRollbackRejectsTamperedPreviousVersion() throws {
         let store = try store()
