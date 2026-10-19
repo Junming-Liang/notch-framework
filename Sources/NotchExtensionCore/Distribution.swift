@@ -296,7 +296,11 @@ public actor SignedPackageTransport {
               ((attrs[.posixPermissions] as? NSNumber)?.intValue ?? 0o777) & 0o022 == 0 else { throw ExtensionError.unsafePath("Directory ownership or permissions: " + url.path) }
     }
     private nonisolated static func rejectSymlinks(_ url: URL) throws {
-        var current = url.standardizedFileURL
+        // Preserve /private/var: standardizedFileURL can reintroduce /var's symlink.
+        guard url.isFileURL, !url.path.split(separator: "/").contains(where: { $0 == "." || $0 == ".." }) else {
+            throw ExtensionError.unsafePath(url.path)
+        }
+        var current = url
         while current.path != "/" {
             if let attr = try? FileManager.default.attributesOfItem(atPath: current.path), attr[.type] as? FileAttributeType == .typeSymbolicLink { throw ExtensionError.unsafePath(current.path) }
             current.deleteLastPathComponent()

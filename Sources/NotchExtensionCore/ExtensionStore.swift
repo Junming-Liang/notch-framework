@@ -18,7 +18,7 @@ public final class ExtensionStore: @unchecked Sendable {
 
     public init(rootURL: URL) throws {
         guard rootURL.isFileURL else { throw ExtensionError.unsafePath("Store must be local") }
-        self.rootURL = rootURL.standardizedFileURL
+        self.rootURL = rootURL
         try Self.rejectSymlinkAncestors(self.rootURL)
         try fm.createDirectory(at: self.rootURL, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         try Self.checkPrivateDirectory(self.rootURL)
@@ -241,7 +241,12 @@ public final class ExtensionStore: @unchecked Sendable {
               ((attributes[.posixPermissions] as? NSNumber)?.intValue ?? 0o777) & 0o022 == 0 else { throw ExtensionError.unsafePath("Directory ownership or permissions: " + url.path) }
     }
     private static func rejectSymlinkAncestors(_ url: URL) throws {
-        var current = url.standardizedFileURL
+        // Foundation standardization may rewrite /private/var to /var on macOS.
+        // Keep the caller's resolved spelling; never follow an untrusted symlink.
+        guard url.isFileURL, !url.path.split(separator: "/").contains(where: { $0 == "." || $0 == ".." }) else {
+            throw ExtensionError.unsafePath(url.path)
+        }
+        var current = url
         while current.path != "/" {
             if let attrs = try? FileManager.default.attributesOfItem(atPath: current.path), attrs[.type] as? FileAttributeType == .typeSymbolicLink {
                 throw ExtensionError.unsafePath(current.path)
