@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import NotchExtensionCore
 
@@ -10,7 +11,7 @@ struct Smoke {
             throw NSError(domain: "NotchSmoke", code: 1, userInfo: [NSLocalizedDescriptionKey: "Usage: NotchSmoke <trusted locally built Hello fixture directory>"])
         }
         let fixture = URL(fileURLWithPath: CommandLine.arguments[1]).resolvingSymlinksInPath()
-        let root = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent("notch-smoke-\(UUID().uuidString)")
+        let root = (try physicalFixtureParent(FileManager.default.temporaryDirectory)).appendingPathComponent("notch-smoke-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
         let store = try ExtensionStore(rootURL: root.appendingPathComponent("store"))
         let first = try store.installDeveloperFixture(from: fixture)
@@ -34,4 +35,13 @@ struct Smoke {
         print("PASS: real Hello IPC, install, enable, disable, upgrade, rollback, recoverable uninstall")
     }
     static func failure(_ message: String) -> NSError { NSError(domain: "NotchSmoke", code: 2, userInfo: [NSLocalizedDescriptionKey: message]) }
+}
+
+// Resolve only a trusted, existing fixture parent. Never use this on package paths.
+private func physicalFixtureParent(_ url: URL) throws -> URL {
+    guard let pointer = realpath(url.path, nil) else {
+        throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+    }
+    defer { free(pointer) }
+    return URL(fileURLWithPath: String(cString: pointer), isDirectory: true)
 }
