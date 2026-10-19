@@ -89,8 +89,10 @@ public final class ExtensionStore: @unchecked Sendable {
         var index = try readIndex()
         guard var item = index[id] else { throw ExtensionError.notInstalled(id) }
         if enabled {
-            guard try validatePackage(versionURL(id: id, version: item.manifest.version)) == item.manifest else {
-                throw ExtensionError.invalidPackage("Installed manifest changed")
+            let package = versionURL(id: id, version: item.manifest.version)
+            guard try validatePackage(package) == item.manifest,
+                  try contentDigests(package, manifest: item.manifest) == item.fileSHA256 else {
+                throw ExtensionError.invalidPackage("Installed package bytes changed")
             }
         }
         item.enabled = enabled; index[id] = item
