@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import CryptoKit
 import NotchExtensionCore
@@ -10,7 +11,7 @@ struct NetworkSmoke {
     static func main() async throws {
         guard (2...3).contains(CommandLine.arguments.count) else { throw failure("Usage: NotchNetworkSmoke <trusted locally built Hello fixture> [--serve]") }
         let fixture = URL(fileURLWithPath: CommandLine.arguments[1]).resolvingSymlinksInPath()
-        let root = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent("notch-network-\(UUID().uuidString)")
+        let root = (try physicalFixtureParent(FileManager.default.temporaryDirectory)).appendingPathComponent("notch-network-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let tools = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("Tools")
@@ -83,4 +84,13 @@ struct NetworkSmoke {
         try p.run();p.waitUntilExit();guard p.terminationStatus==0 else { throw failure("fixture archive builder failed") }
     }
     static func failure(_ message:String)->NSError { NSError(domain:"NotchNetworkSmoke",code:1,userInfo:[NSLocalizedDescriptionKey:message]) }
+}
+
+// Resolve only a trusted, existing fixture parent. Never use this on package paths.
+private func physicalFixtureParent(_ url: URL) throws -> URL {
+    guard let pointer = realpath(url.path, nil) else {
+        throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+    }
+    defer { free(pointer) }
+    return URL(fileURLWithPath: String(cString: pointer), isDirectory: true)
 }
