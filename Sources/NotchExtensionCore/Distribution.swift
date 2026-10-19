@@ -296,14 +296,21 @@ public actor SignedPackageTransport {
               ((attrs[.posixPermissions] as? NSNumber)?.intValue ?? 0o777) & 0o022 == 0 else { throw ExtensionError.unsafePath("Directory ownership or permissions: " + url.path) }
     }
     private nonisolated static func rejectSymlinks(_ url: URL) throws {
-        // Preserve /private/var: standardizedFileURL can reintroduce /var's symlink.
-        guard url.isFileURL, !url.path.split(separator: "/").contains(where: { $0 == "." || $0 == ".." }) else {
-            throw ExtensionError.unsafePath(url.path)
+        // Use lexical string parents. Foundation URL normalization can rewrite
+        // /private/var to /var; never normalize or follow caller-provided links.
+        let path = url.path
+        guard url.isFileURL, path.hasPrefix("/"),
+              !path.split(separator: "/").contains(where: { $0 == "." || $0 == ".." }) else {
+            throw ExtensionError.unsafePath(path)
         }
-        var current = url
-        while current.path != "/" {
-            if let attr = try? FileManager.default.attributesOfItem(atPath: current.path), attr[.type] as? FileAttributeType == .typeSymbolicLink { throw ExtensionError.unsafePath(current.path) }
-            current.deleteLastPathComponent()
+        var components = path.split(separator: "/")
+        while !components.isEmpty {
+            let current = "/" + components.joined(separator: "/")
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: current),
+               attrs[.type] as? FileAttributeType == .typeSymbolicLink {
+                throw ExtensionError.unsafePath(current)
+            }
+            components.removeLast()
         }
     }
 }
